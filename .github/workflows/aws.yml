@@ -1,0 +1,125 @@
+name: Deploy to Amazon ECS (Part 2)
+
+on:
+  push:
+    branches: [ "main" ]
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: abc
+  ECS_SERVICE: ecs-service-${{ github.run_number }}
+  ECS_CLUSTER: markrtting-dev-markettingeks
+  ECS_TASK_DEFINITION: .aws/task-definition.json
+  CONTAINER_NAME: container-${{ github.run_number }}
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: AKIASPGW2BSUCAZBHS5E
+        aws-secret-access-key: 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
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+
+    - name: Build, tag, and push image to Amazon ECR
+      id: build-image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+    - name: Fill in the new image ID in the Amazon ECS task definition
+      id: task-def
+      uses: aws-actions/amazon-ecs-render-task-definition@v1
+      with:
+        task-definition: ${{ env.ECS_TASK_DEFINITION }}
+        container-name: ${{ env.CONTAINER_NAME }}
+        image: ${{ steps.build-image.outputs.image }}
+
+    - name: Deploy Amazon ECS task definition
+      uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+      with:
+        task-definition: ${{ steps.task-def.outputs.task-definition }}
+        service: ${{ env.ECS_SERVICE }}
+        cluster: ${{ env.ECS_CLUSTER }}
+        wait-for-service-stability: true
+
+    - name: Create and Deploy to EKS
+      if: ${{ params.ENVIRONMENT == 'create' }}
+      steps:
+      - name: Create prometheus
+        run: |
+          cd kubernetes/prometheus-helm
+          aws eks --region eu-west-2 update-kubeconfig --name hr-dev-eks-demo
+          terraform init
+          terraform apply -auto-approve
+
+      - name: Deploy voting-app to EKS
+        run: |
+          cd kubernetes/voting-app
+          terraform init
+          terraform apply -auto-approve
+
+      - name: Deploy sock-shop to EKS
+        run: |
+          cd kubernetes/micro-service
+          terraform init
+          terraform apply -auto-approve
+
+      - name: Deploy ingress rule to EKS
+        run: |
+          cd kubernetes/ingress-rule
+          terraform init
+          terraform apply -auto-approve
+
+      - name: Create nginx-conroller & route53
+        run: |
+          cd kubernetes/nginx-controller
+          terraform init
+          terraform apply -auto-approve
+
+    - name: Destroy EKS resources
+      if: ${{ params.ENVIRONMENT == 'destroy' }}
+      steps:
+      - name: Destroy prometheus
+        run: |
+          cd kubernetes/prometheus-helm
+          terraform destroy -auto-approve
+
+      - name: Destroy voting-app in EKS
+        run: |
+          cd kubernetes/voting-app
+          terraform destroy -auto-approve
+
+      - name: Destroy sock-shop in EKS
+        run: |
+          cd kubernetes/micro-service
+          terraform destroy -auto-approve
+
+      - name: Destroy ingress rule in EKS
+        run: |
+          cd kubernetes/ingress-rule
+          terraform destroy -auto-approve
+
+      - name: Destroy nginx-conroller
+        run: |
+          cd kubernetes/nginx-controller
+          terraform destroy -auto-approve
