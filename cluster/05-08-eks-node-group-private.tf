@@ -14,7 +14,7 @@
 
 
 #   remote_access {
-#     ec2_ssh_key = "project"    
+#     ec2_ssh_key = "eks-tf-keypair"    
 #   }
 
 #   scaling_config {
