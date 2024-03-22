@@ -19,7 +19,7 @@ jobs:
 
       - name: Create EKS Cluster
         run: |
-          eksctl create cluster --name markrtting-dev-markettingeks --region us-west-2
+          eksctl create cluster --name markrtting-dev-markettingeks --region us-east-1
 
       - name: Deploy voting-app to EKS
         if: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, 'create') }}
