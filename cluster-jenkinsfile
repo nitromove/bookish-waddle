@@ -6,25 +6,20 @@ pipeline {
         AWS_DEFAULT_REGION = "us-east-1"
     }
     parameters {
-        choice(name: 'ACTION', choices: ['create', 'delete'], description: 'Choose action to perform on the cluster')
+        choice(name: 'ENVIRONMENT', choices: ['create', 'destroy'], description: 'Create and destroy cluster with one click')
     }
 
     stages {
-        stage("Manage EKS Cluster") {
+        stage("Create an EKS Cluster") {
+            when {
+                expression { params.ENVIRONMENT == 'create' }
+            }
             steps {
                 script {
-                    dir('cluster') {
-                        if (params.ACTION == 'create') {
-                            sh "terraform init"
-                            sh "terraform apply -auto-approve"
-                        } else if (params.ACTION == 'delete') {
-                            echo "Cluster deletion is not supported in this pipeline."
-                        } else {
-                            error "Invalid action specified."
-                        }
+                    dir('cluster') { // Update directory path to 'cluster'
+                        sh "terraform init"
+                        sh "terraform apply -auto-approve"
                     }
                 }
             }
         }
-    }
-}
